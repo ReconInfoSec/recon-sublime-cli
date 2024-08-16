@@ -26,7 +26,8 @@ class Sublime(object):
 
     _NAME = "Sublime"
     _BASE_URL = os.environ.get('BASE_URL')
-    _BASE_URL = _BASE_URL if _BASE_URL else "https://analyzer.sublime.security"
+    #_BASE_URL = _BASE_URL if _BASE_URL else "https://analyzer.sublime.security"
+    _BASE_URL = _BASE_URL if _BASE_URL else "https://api.platform.sublimesecurity.com"
     _API_VERSION = "v1"
     _EP_ME = "me"
     _EP_FEEDBACK = "feedback"
@@ -43,6 +44,14 @@ class Sublime(object):
     _EP_PUBLIC_BINEXPLODE_SCAN_RESULT = "binexplode/scan/{id}"
     _EP_PUBLIC_TASK_STATUS = "tasks/{id}"
 
+    _EP_ORG_CHILD = "organizations/mine/child-organizations"
+    
+    _EP_LISTS = "lists"
+    _EP_LIST_ENTRIES = "lists/{id}/entries"
+    
+    _EP_MESSAGE_IMAGE = "messages/{id}/image"
+    _EP_MESSAGE_IMAGE_LINK = "messages/{id}/image_link"
+
     def __init__(self, api_key=None):
         if api_key is None:
             config = load_config()
@@ -51,9 +60,9 @@ class Sublime(object):
         self.session = requests.Session()
 
     def _is_public_endpoint(self, endpoint):
-        if endpoint in [self._EP_PUBLIC_BINEXPLODE_SCAN, self._EP_MESSAGES_ANALYZE, self._EP_MESSAGES_CREATE]:
+        if endpoint in [self._EP_PUBLIC_BINEXPLODE_SCAN, self._EP_MESSAGES_ANALYZE, self._EP_MESSAGES_CREATE, self._EP_LIST_ENTRIES, self._EP_ORG_CHILD]: #this doesn't work if it's formatted
             return True
-        if endpoint.startswith("binexplode") or endpoint.startswith("tasks/"):
+        if endpoint.startswith("binexplode") or endpoint.startswith("tasks/") or endpoint.startswith("lists"): #FIXME this is not sustainable.  find a better way.
             return True
 
         return False
@@ -74,6 +83,7 @@ class Sublime(object):
         :raises APIError: for all other 4xx or 5xx status codes
 
         """
+
         if params is None:
             params = {}
         headers = {
@@ -95,6 +105,10 @@ class Sublime(object):
             )
         elif request_type == 'POST':
             response = self.session.post(
+                    url, headers=headers, json=json
+            )
+        elif request_type == 'PUT':
+            response = self.session.put(
                     url, headers=headers, json=json
             )
         elif request_type == 'PATCH':
@@ -297,6 +311,130 @@ class Sublime(object):
 
         response, _ = self._request(endpoint, request_type='POST')
         return response
+
+    def create_child_org(self, org_name):
+        """Creates a child organization (for multi-tenancy)"""
+
+        endpoint = self._EP_ORG_CHILD
+
+        params = { "name": org_name }
+
+        response, _  = self._request(endpoint, request_type="POST", json=params)
+
+        return response['id']
+
+
+    def create_list(self, name, descr = "Custom List"):
+
+        list_id = self.get_list_id(name)
+        
+        if list_id:
+            LOGGER.info(f"Attempt to create existing list {name}, returned existing id {list_id}")
+            return list_id
+        
+        endpoint = self._EP_LISTS 
+
+        params = {"description": descr, "name": name }
+        
+        r, _ = self._request(endpoint, request_type="POST", json=params)
+
+        return  r['id']
+
+    def retrieve_lists(self, list_id=None, list_name=None):
+        """Retrieves filtered lists from the Sublime server"""
+
+        endpoint = self._EP_LISTS 
+
+        params = {"entry_type": "string"}
+        if list_id != None:
+            params['id']=list_id
+        if list_name != None:
+            params['name']=list_name
+
+        response, _ = self._request(endpoint, request_type='GET', params=params)
+
+        print(params)
+        print(response)
+        #exit()
+
+        return response
+
+    def get_list_id(self, name):
+        """Retrieves a list ID from a supplied list name"""
+        
+        r = self.retrieve_lists(list_name=name)
+
+        if isinstance(r, dict):
+            list_id = r['lists'][0]['id']
+            LOGGER.debug(f"Found list id {list_id}")
+            return list_id
+        else:
+            LOGGER.debug(f"No ID found for list {name}")
+            return None
+
+    def set_list(self, content, list_id=None, list_name=None, create_if_missing=False):
+        """Sets list content on the server, must have a list_id or list_name passed"""
+       
+        if not list_id and not list_name:
+            raise AttributeError("Either list_id or list_name must be defined") 
+        if list_name:
+            list_id = self.get_list_id(list_name)
+            if not list_id:
+                if create_if_missing:
+                    list_id = self.create_list(name)
+                else:
+                    raise AttributeError(f"Passed list name {list_name} does not exist")
+
+        if not isinstance(content, list):
+            raise AttributeError("content must be a list of values")
+
+        endpoint = self._EP_LIST_ENTRIES.format(id=list_id)
+        
+        response, _ = self._request(endpoint, request_type='PUT', json={"entries": content})
+
+        return response
+    
+    def set_list_from_file(self, file, list_id=None, list_name=None):
+        """Sets list content on the server from a supplied local file"""
+       
+        # this is redundant to the checks in set_list, but I didn't want to open/read the file prior to validating params
+        if not list_id and not list_name:
+            raise AttributeError("Either list_id or list_name must be defined") 
+        if list_name:
+            list_id = self.get_list_id(list_name)
+            if not list_id:
+                if create_if_missing:
+                    list_id = self.create_list(name)
+                else:
+                    raise AttributeError(f"Passed list name {list_name} does not exist")
+
+        with open(file, 'r', encoding='utf-8')as f:
+            filedata = f.readlines()
+        
+        content = [s.rstrip() for s in filedata]
+
+        return self.set_list(content, list_id=list_id)
+
+    def get_message_image(self, message_id):
+        """Retrieves an image of an email message from the server"""
+
+        endpoint = self._EP_MESSAGE_IMAGE.format(id=message_id)
+
+        response, _ = self._request(endpoint, request_type='GET')
+
+        return response
+
+    def get_message_image_link(self, message_id, duration=600):
+        """Retrieves a temporary link to an image of an email message.  Pass duration (in seconds) to specify how long the link lasts (default is 600)"""
+        
+        endpoint = self._EP_MESSAGE_IMAGE_LINK.format(id=message_id)
+
+        params = { "report_label": label, "review_comment": comment }
+        
+        response, _ = self._request(endpoint, request_type='GET', params=params)
+
+        return response
+
 
     def _not_implemented(self, subcommand_name):
         """Send request for a not implemented CLI subcommand.
