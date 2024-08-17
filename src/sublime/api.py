@@ -388,7 +388,7 @@ class Sublime(object):
         
         response, _ = self._request(endpoint, request_type='PUT', json={"entries": content})
 
-        return response
+        return len(content)
     
     def set_list_from_file(self, file, list_id=None, list_name=None):
         """Sets list content on the server from a supplied local file"""
