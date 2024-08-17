@@ -353,10 +353,6 @@ class Sublime(object):
 
         response, _ = self._request(endpoint, request_type='GET', params=params)
 
-        print(params)
-        print(response)
-        #exit()
-
         return response
 
     def get_list_id(self, name):
