@@ -395,7 +395,7 @@ class Sublime(object):
         return response
     
     def set_list_from_file(self, file, list_id=None, list_name=None):
-        """Sets list content on the server from a supplied local file"""
+        """Sets list content on the server from a supplied local file, returns number of lines set"""
        
         # this is redundant to the checks in set_list, but I didn't want to open/read the file prior to validating params
         if not list_id and not list_name:
@@ -413,7 +413,9 @@ class Sublime(object):
         
         content = [s.rstrip() for s in filedata]
 
-        return self.set_list(content, list_id=list_id)
+        self.set_list(content, list_id=list_id)
+
+        return len(content)
 
     def get_message_image(self, message_id):
         """Retrieves an image of an email message from the server"""
