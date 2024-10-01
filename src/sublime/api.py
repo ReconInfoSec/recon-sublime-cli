@@ -4,6 +4,8 @@ import os
 import json
 import time
 import datetime
+from datetime import datetime
+from datetime import timedelta
 
 import requests
 import structlog
@@ -52,6 +54,8 @@ class Sublime(object):
     _EP_MESSAGE_IMAGE = "messages/{id}/image"
     _EP_MESSAGE_IMAGE_LINK = "messages/{id}/image_link"
 
+    _EP_USER_REPORTS = "user-reports"
+
     def __init__(self, api_key=None):
         if api_key is None:
             config = load_config()
@@ -60,7 +64,7 @@ class Sublime(object):
         self.session = requests.Session()
 
     def _is_public_endpoint(self, endpoint):
-        if endpoint in [self._EP_PUBLIC_BINEXPLODE_SCAN, self._EP_MESSAGES_ANALYZE, self._EP_MESSAGES_CREATE, self._EP_LIST_ENTRIES, self._EP_ORG_CHILD]: #this doesn't work if it's formatted
+        if endpoint in [self._EP_PUBLIC_BINEXPLODE_SCAN, self._EP_MESSAGES_ANALYZE, self._EP_MESSAGES_CREATE, self._EP_LIST_ENTRIES, self._EP_ORG_CHILD, self._EP_USER_REPORTS]: #this doesn't work if it's formatted
             return True
         if endpoint.startswith("binexplode") or endpoint.startswith("tasks/") or endpoint.startswith("lists"): #FIXME this is not sustainable.  find a better way.
             return True
@@ -388,7 +392,7 @@ class Sublime(object):
         
         response, _ = self._request(endpoint, request_type='PUT', json={"entries": content})
 
-        return len(content)
+        return response
     
     def set_list_from_file(self, file, list_id=None, list_name=None):
         """Sets list content on the server from a supplied local file"""
@@ -427,6 +431,23 @@ class Sublime(object):
 
         params = { "report_label": label, "review_comment": comment }
         
+        response, _ = self._request(endpoint, request_type='GET', params=params)
+
+        return response
+
+    def get_user_reports(self, starttime=False, endtime=datetime.isoformat(datetime.utcnow()) + "Z", lookback_days=False, limit=500):
+        """Retrieves user reports.  You must pass either start or looback_days, end time defaults to now. Datetime format is ISO"""
+        
+        endpoint = self._EP_USER_REPORTS
+
+        if not starttime and not lookback_days:
+            raise AttributeError("Either endtime or lookback_days must be defined")
+
+        if lookback_days:
+            starttime = datetime.isoformat(datetime.utcnow() - timedelta(days=lookback_days)) + "Z"
+
+        params = { "limit": limit, "reported_at[gte]": starttime, "reported_at[lt]": endtime }
+
         response, _ = self._request(endpoint, request_type='GET', params=params)
 
         return response
