@@ -365,12 +365,12 @@ class Sublime(object):
         r = self.retrieve_lists(list_name=name)
 
         if isinstance(r, dict):
-            list_id = r['lists'][0]['id']
-            LOGGER.debug(f"Found list id {list_id}")
-            return list_id
-        else:
-            LOGGER.debug(f"No ID found for list {name}")
-            return None
+            if r['lists'] is not None:
+                list_id = r['lists'][0]['id']
+                LOGGER.debug(f"Found list id {list_id}")
+                return list_id
+        LOGGER.debug(f"No ID found for list {name}")
+        return None
 
     def set_list(self, content, list_id=None, list_name=None, create_if_missing=False):
         """Sets list content on the server, must have a list_id or list_name passed"""
