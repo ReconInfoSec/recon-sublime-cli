@@ -372,6 +372,22 @@ class Sublime(object):
         LOGGER.debug(f"No ID found for list {name}")
         return None
 
+    def get_list(self, list_name=None, list_id=None):
+        """Retrieves a full list from either an ID or list name"""
+
+        if not list_id and not list_name:
+            raise AttributeError("Either list_id or list_name must be defined") 
+        if list_name:
+            list_id = self.get_list_id(list_name)
+            if not list_id:
+                raise AttributeError(f"Passed list name {list_name} does not exist")
+
+        endpoint = self._EP_LIST_ENTRIES.format(id=list_id)
+        
+        response, _ = self._request(endpoint, request_type='GET')
+
+        return response
+
     def set_list(self, content, list_id=None, list_name=None, create_if_missing=False):
         """Sets list content on the server, must have a list_id or list_name passed"""
        
