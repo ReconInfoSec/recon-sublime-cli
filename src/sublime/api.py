@@ -50,6 +50,7 @@ class Sublime(object):
     
     _EP_LISTS = "lists"
     _EP_LIST_ENTRIES = "lists/{id}/entries"
+    _EP_LIST_ENTRIES_ENTRY = "lists/{id}/entries/entry"
     
     _EP_MESSAGE_IMAGE = "messages/{id}/image"
     _EP_MESSAGE_IMAGE_LINK = "messages/{id}/image_link"
@@ -432,6 +433,24 @@ class Sublime(object):
         self.set_list(content, list_id=list_id)
 
         return len(content)
+
+    def add_list_entry(self, entry, list_id=None, list_name=None):
+        
+        if not list_id and not list_name:
+            raise AttributeError("Either list_id or list_name must be defined") 
+        if list_name:
+            list_id = self.get_list_id(list_name)
+            if not list_id:
+                raise AttributeError(f"Passed list name {list_name} does not exist")
+
+        endpoint = self._EP_LIST_ENTRIES_ENTRY.format(id=list_id)
+
+        params = { "string": entry }
+
+        response, _  = self._request(endpoint, request_type="POST", json=params)
+
+        return response
+
 
     def get_message_image(self, message_id):
         """Retrieves an image of an email message from the server"""
