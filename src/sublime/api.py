@@ -435,6 +435,7 @@ class Sublime(object):
         return len(content)
 
     def add_list_entry(self, entry, list_id=None, list_name=None):
+        """Adds a single list entry to a supplied list name or ID"""
         
         if not list_id and not list_name:
             raise AttributeError("Either list_id or list_name must be defined") 
