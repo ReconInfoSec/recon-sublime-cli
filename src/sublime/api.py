@@ -56,6 +56,9 @@ class Sublime(object):
     _EP_MESSAGE_IMAGE_LINK = "messages/{id}/image_link"
 
     _EP_USER_REPORTS = "user-reports"
+    
+    _EP_USERS = "users"
+    _EP_USERS_INDIV = "users/{id}"
 
     def __init__(self, api_key=None):
         if api_key is None:
@@ -487,6 +490,83 @@ class Sublime(object):
         params = { "limit": limit, "reported_at[gte]": starttime, "reported_at[lt]": endtime }
 
         response, _ = self._request(endpoint, request_type='GET', params=params)
+
+        return response
+
+    def retrieve_users(self, user_id=None):
+        """Retrieves filtered lists from the Sublime server"""
+
+        if user_id == None:
+            endpoint = self._EP_USERS
+        else:
+            endpoint = self._EP_USERS_INDIV.format(id=user_id)
+
+        params = {"entry_type": "string"}
+
+        response, _ = self._request(endpoint, request_type='GET', params=params)
+
+        return response
+
+    def find_user_by_email(self, user_email=None):
+        """Finds a user record by the email address for that user"""
+
+        if not user_email:
+            raise AttributeError("user_email must be specified")
+
+        # pull all users and find user email
+        users = self.retrieve_users()
+        LOGGER.debug(f"Found {len(users)} total users.  looking for email {user_email}")
+        for user in users:
+            if user['email_address'] == user_email:
+                LOGGER.debug(f"Found user {user['id']}")
+                return user
+
+        raise AttributeError(f"user_email {user_email} not found")
+
+    def update_user(self, user_id=None, user_email=None, new_data=None):
+        """Updates a user record by applying a dictionary of new_data"""
+
+        if not isinstance(new_data, dict):
+            raise AttributeError("new_data must be a dictionary")
+
+        allowed = ["role","first_name","last_name","email_address"]
+        for k,v in new_data.items():
+            if k not in allowed:
+                raise AttributeError("new_data may only contain role, first_name, last_name, or email_address")
+
+        if user_id:
+            user=self.retrieve_users(user_id=user_id)
+        elif user_email:
+            user=self.find_user_by_email(user_email=user_email)
+        else:
+            raise AttributeError("user_id or user_email must be specified")
+
+        # create a dict of either the new value or existing value
+        update={}
+        for key in ["role","first_name","last_name","email_address"]:
+            update[key] = new_data.get(key, user[key])
+            LOGGER.debug(f"updating {key} for user, old value is {user[key]}, new value is {update[key]}")
+
+        endpoint = self._EP_USERS_INDIV.format(id=user['id'])
+
+        response, _ = self._request(endpoint, request_type='POST', json=update)
+
+        return response
+
+    def delete_user(self, user_id=None, user_email=None):
+        """Deletes a user record by ID or email"""
+
+        if user_id:
+            user=self.retrieve_users(user_id=user_id)
+        elif user_email:
+            user=self.find_user_by_email(user_email=user_email)
+        else:
+            raise AttributeError("user_id or user_email must be specified")
+
+
+        endpoint = self._EP_USERS_INDIV.format(id=user['id'])
+
+        response, _ = self._request(endpoint, request_type='DELETE')
 
         return response
 
