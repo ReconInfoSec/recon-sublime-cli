@@ -60,6 +60,8 @@ class Sublime(object):
     _EP_USERS = "users"
     _EP_USERS_INDIV = "users/{id}"
 
+    _EP_MAILBOXES = "mailboxes"
+
     def __init__(self, api_key=None):
         if api_key is None:
             config = load_config()
@@ -68,7 +70,14 @@ class Sublime(object):
         self.session = requests.Session()
 
     def _is_public_endpoint(self, endpoint):
-        if endpoint in [self._EP_PUBLIC_BINEXPLODE_SCAN, self._EP_MESSAGES_ANALYZE, self._EP_MESSAGES_CREATE, self._EP_LIST_ENTRIES, self._EP_ORG_CHILD, self._EP_USER_REPORTS]: #this doesn't work if it's formatted
+        if endpoint in [  # This list doesn't work if the endpoint is formatted
+                self._EP_PUBLIC_BINEXPLODE_SCAN, 
+                self._EP_MESSAGES_ANALYZE, 
+                self._EP_MESSAGES_CREATE, 
+                self._EP_LIST_ENTRIES, 
+                self._EP_ORG_CHILD, 
+                self._EP_USER_REPORTS, 
+                self._EP_MAILBOXES]:
             return True
         if endpoint.startswith("binexplode") or endpoint.startswith("tasks/") or endpoint.startswith("lists"): #FIXME this is not sustainable.  find a better way.
             return True
@@ -494,7 +503,7 @@ class Sublime(object):
         return response
 
     def retrieve_users(self, user_id=None):
-        """Retrieves filtered lists from the Sublime server"""
+        """Retrieves users from the Sublime server"""
 
         if user_id == None:
             endpoint = self._EP_USERS
@@ -570,6 +579,63 @@ class Sublime(object):
 
         return response
 
+    def retrieve_mailboxes(self, search=None, mailbox_types=None, email_addresses=None, active=None, message_source_id=None):
+        """Retrieves mailboxes and automatically handles pagnation"""
+
+        params = {
+                "entry_type": "string",
+                "search": search,
+                "mailbox_types": mailbox_types,
+                "email_addresses": email_addresses,
+                "active": active,
+                "message_source_id": message_source_id,
+                "limit": 500
+                }
+
+        endpoint = self._EP_MAILBOXES
+        response, _ = self._request(endpoint, request_type='GET', params=params)
+
+        mailboxes = response['mailboxes']
+
+        if response['total'] > 500: # there is an api limit of 500, so now we need to get counts and stuff
+            LOGGER.debug(f"retrieve mailboxes found {response['total']} mailboxes but limit is 500. downloading additional entries")
+            marker = 500
+
+            while marker < response['total']:
+                params['offset'] = marker
+                response, _ = self._request(endpoint, request_type='GET', params=params)
+                mailboxes.extend(response['mailboxes'])
+                marker += 500
+
+            LOGGER.debug(f"Total mailboxes retrieved was {len(mailboxes)}")
+
+        return mailboxes
+
+    def summarize_mailboxes(self):
+        """Returns a dictionary with mailbox counts"""
+        counts = {
+                'activeusers': 0,
+                'inactiveusers': 0,
+                'activeothers': 0,
+                'inactiveothers': 0
+                }
+
+        usermailboxes = self.retrieve_mailboxes(mailbox_types='user')
+        othermailboxes = self.retrieve_mailboxes(mailbox_types='other')
+
+        for um in usermailboxes:
+            if um['active']:
+                counts['activeusers']+=1
+            else:
+                counts['inactiveusers']+=1
+
+        for om in othermailboxes:
+            if om['active']:
+                counts['activeothers']+=1
+            else:
+                counts['inactiveothers']+=1
+
+        return counts
 
     def _not_implemented(self, subcommand_name):
         """Send request for a not implemented CLI subcommand.
