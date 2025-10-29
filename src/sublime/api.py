@@ -47,6 +47,7 @@ class Sublime(object):
     _EP_PUBLIC_TASK_STATUS = "tasks/{id}"
 
     _EP_ORG_CHILD = "organizations/mine/child-organizations"
+    _EP_ADMIN_AUTH = "admin-auth"
     
     _EP_LISTS = "lists"
     _EP_LIST_ENTRIES = "lists/{id}/entries"
@@ -60,7 +61,11 @@ class Sublime(object):
     _EP_USERS = "users"
     _EP_USERS_INDIV = "users/{id}"
 
+    _EP_MESSAGE_SOURCES = "message-sources"
     _EP_MAILBOXES = "mailboxes"
+    
+    _EP_ACTIVATE_MAILBOXES = "message-sources/{id}/mailboxes/activate"
+
 
     def __init__(self, api_key=None):
         if api_key is None:
@@ -84,7 +89,7 @@ class Sublime(object):
 
         return False
 
-    def _request(self, endpoint, request_type='GET', params=None, json=None):
+    def _request(self, endpoint, request_type='GET', params=None, json=None, headers=None):
         """Handle the requesting of information from the API.
 
         :param endpoint: Endpoint to send the request to.
@@ -103,18 +108,21 @@ class Sublime(object):
 
         if params is None:
             params = {}
-        headers = {
-            "User-Agent": "sublime-cli/{}".format(__version__)
-        }
+        
+        if headers is None:
+            headers = { "User-Agent": "sublime-cli/{}".format(__version__) }
+        else:
+            headers["User-Agent"] = "sublime-cli/{}".format(__version__)
+        
         if self._api_key:
             headers["Key"] = self._api_key
-
+        
         is_public = self._is_public_endpoint(endpoint)
         api_version = self._API_VERSION_PUBLIC if is_public else self._API_VERSION
 
         url = "/".join([self._BASE_URL, api_version, endpoint])
 
-        # LOGGER.debug("Sending API request...", url=url, params=params, json=json)
+        LOGGER.debug("Sending API request...", url=url, headers=headers, params=params, json=json)
 
         if request_type == 'GET':
             response = self.session.get(
@@ -340,6 +348,21 @@ class Sublime(object):
 
         return response['id']
 
+    def create_approval_link(self, org_id, provider):
+        """Cretes an admin approval link for a message source"""
+        
+        if provider not in ["microsoft", "google"]:
+            raise AttributeError("Provider must be microsoft or google")
+
+        endpoint = self._EP_ADMIN_AUTH
+
+        headers = { "x-sublime-child-organization": org_id }
+        params = { "provider": provider }
+
+
+        response, _ = self._request(endpoint, request_type="POST", headers=headers, json=params)
+
+        return response['url']
 
     def create_list(self, name, descr = "Custom List"):
 
@@ -579,6 +602,16 @@ class Sublime(object):
 
         return response
 
+    def retrieve_message_sources(self):
+        """Retrieves message sources"""
+
+        params = {}
+
+        endpoint = self._EP_MESSAGE_SOURCES
+        response, _ = self._request(endpoint, request_type='GET', params=params)
+
+        return response
+
     def retrieve_mailboxes(self, search=None, mailbox_types=None, email_addresses=None, active=None, message_source_id=None):
         """Retrieves mailboxes and automatically handles pagnation"""
 
@@ -636,6 +669,49 @@ class Sublime(object):
                 counts['inactiveothers']+=1
 
         return counts
+
+    def activate_mailboxes(self, search=None, mailbox_types=None, email_addresses=None, message_source_id=None):
+        """Attempts to activate mailboxes.  Providing a search, mailbox_type, email_address, or message_source_id constrains the activity to just those mailboxes, otherwise all are selected."""
+
+        message_source_ids = []
+        #if a message source id is provided, fairly simple, otherwise we iterate
+        if message_source_id == None:
+            LOGGER.debug(f"Getting message sources")
+            message_sources = self.retrieve_message_sources()
+            for s in message_sources['message_sources']:
+                message_source_ids.append(s['id'])
+
+            LOGGER.debug(f"Found {len(message_source_ids)} message sources")
+        else:
+            message_sources_ids[0] = (message_source_id)
+
+        # Activate calls are per message source
+
+        totalcount = 0
+        for s in message_source_ids:
+
+            LOGGER.debug(f"Getting mailboxes for message source id {s}")
+            
+            mailboxes = self.retrieve_mailboxes(search=search, mailbox_types=mailbox_types, email_addresses=email_addresses, active=False, message_source_id=s)
+
+            print(mailboxes)
+            
+            mailbox_ids = []
+            for m in mailboxes:
+                mailbox_ids.append(m['id'])
+                totalcount += 1
+
+            if len(mailbox_ids) == 0:
+                LOGGER.debug(f"No unactivated mailboxes found for message source {s}")
+                continue
+           
+            endpoint = self._EP_ACTIVATE_MAILBOXES.format(id=s)
+            response, _ = self._request(endpoint, request_type='POST', json={ "mailbox_ids": mailbox_ids })
+            
+        
+        LOGGER.debug("Finished activate call")
+        return totalcount
+
 
     def _not_implemented(self, subcommand_name):
         """Send request for a not implemented CLI subcommand.
