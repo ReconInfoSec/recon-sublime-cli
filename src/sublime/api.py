@@ -122,7 +122,7 @@ class Sublime(object):
 
         url = "/".join([self._BASE_URL, api_version, endpoint])
 
-        LOGGER.debug("Sending API request...", url=url, headers=headers, params=params, json=json)
+        # LOGGER.debug("Sending API request...", url=url, headers=headers, params=params, json=json)
 
         if request_type == 'GET':
             response = self.session.get(
