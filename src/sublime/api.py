@@ -424,7 +424,7 @@ class Sublime(object):
 
         return response
 
-    def set_list(self, content, list_id=None, list_name=None, create_if_missing=False):
+    def set_list(self, content, list_id=None, list_name=None, create_if_missing=False, max_line_length=2000):
         """Sets list content on the server, must have a list_id or list_name passed"""
        
         if not list_id and not list_name:
@@ -440,13 +440,21 @@ class Sublime(object):
         if not isinstance(content, list):
             raise AttributeError("content must be a list of values")
 
+        removes = []
+        for c in content:
+            if len(c) > max_line_length:
+                removes.append(c)
+
+        for r in removes:
+            content.remove(r)
+
         endpoint = self._EP_LIST_ENTRIES.format(id=list_id)
         
         response, _ = self._request(endpoint, request_type='PUT', json={"entries": content})
 
         return response
     
-    def set_list_from_file(self, file, list_id=None, list_name=None):
+    def set_list_from_file(self, file, list_id=None, list_name=None, max_line_length=2000):
         """Sets list content on the server from a supplied local file, returns number of lines set"""
        
         # this is redundant to the checks in set_list, but I didn't want to open/read the file prior to validating params
@@ -465,7 +473,7 @@ class Sublime(object):
         
         content = [s.rstrip() for s in filedata]
 
-        self.set_list(content, list_id=list_id)
+        self.set_list(content, list_id=list_id, max_line_length=max_line_length)
 
         return len(content)
 
@@ -694,8 +702,6 @@ class Sublime(object):
             
             mailboxes = self.retrieve_mailboxes(search=search, mailbox_types=mailbox_types, email_addresses=email_addresses, active=False, message_source_id=s)
 
-            print(mailboxes)
-            
             mailbox_ids = []
             for m in mailboxes:
                 mailbox_ids.append(m['id'])
