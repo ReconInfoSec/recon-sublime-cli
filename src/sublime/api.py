@@ -653,28 +653,64 @@ class Sublime(object):
         return mailboxes
 
     def summarize_mailboxes(self):
-        """Returns a dictionary with mailbox counts"""
+        """Returns a dictionary with mailbox total counts and domain counts"""
         counts = {
-                'activeusers': 0,
-                'inactiveusers': 0,
-                'activeothers': 0,
-                'inactiveothers': 0
+                'totals': { 
+                    'activeusers': 0,
+                    'inactiveusers': 0,
+                    'activeothers': 0,
+                    'inactiveothers': 0
+                    }
                 }
+
+        domains = self.get_list(list_name='org_domains')
+        for d in domains['entries']:
+            counts[d] = {
+                    'activeusers': 0,
+                    'inactiveusers': 0,
+                    'activeothers': 0,
+                    'inactiveothers': 0
+                    }
 
         usermailboxes = self.retrieve_mailboxes(mailbox_types='user')
         othermailboxes = self.retrieve_mailboxes(mailbox_types='other')
 
         for um in usermailboxes:
+            email,domain = um['email_address'].split("@")
+            if counts.get(domain, "") == "": #this is here because org_domains is not complete
+                LOGGER.info(f"domain {domain} not in org_domains")
+                counts[domain] = {
+                    'activeusers': 0,
+                    'inactiveusers': 0,
+                    'activeothers': 0,
+                    'inactiveothers': 0
+                    }
+
+
             if um['active']:
-                counts['activeusers']+=1
+                counts['totals']['activeusers']+=1
+                counts[domain]['activeusers']+=1
             else:
-                counts['inactiveusers']+=1
+                counts['totals']['inactiveusers']+=1
+                counts[domain]['inactiveusers']+=1
 
         for om in othermailboxes:
+            email,domain = om['email_address'].split("@")
+            if counts.get(domain, "") == "":
+                LOGGER.info(f"domain {domain} not in org_domains")
+                counts[domain] = {
+                    'activeusers': 0,
+                    'inactiveusers': 0,
+                    'activeothers': 0,
+                    'inactiveothers': 0
+                    }
+            
             if om['active']:
-                counts['activeothers']+=1
+                counts['totals']['activeothers']+=1
+                counts[domain]['activeothers']+=1
             else:
-                counts['inactiveothers']+=1
+                counts['totals']['inactiveothers']+=1
+                counts[domain]['inactiveothers']+=1
 
         return counts
 
